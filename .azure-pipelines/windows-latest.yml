@@ -6,9 +6,56 @@ jobs:
   pool:
     vmImage: windows-latest
   steps:
-  - script: >
-      git clone --depth=1 https://github.com/wingtk/gvsbuild.git .
+  - task: Cache@2
+    inputs:
+      key: 'gvsbuild | "$(Agent.OS)"'
+      restoreKeys: 'gvsbuild | "$(Agent.OS)"'
+      path: "$(Build.SourcesDirectory)\\gvsbuild"
+      cacheHitVar: SetupRestored
+    displayName: Cache setup
+
+  - script: |
+      git clone --depth=1 https://github.com/wingtk/gvsbuild.git gvsbuild
+    displayName: Clone gvsbuild
+    condition: ne(variables.SetupRestored, 'true')
+
+  - script: |
       python -m venv env
-      .\env\Scripts\activate
+    workingDirectory: "$(Build.SourcesDirectory)\\gvsbuild"
+    displayName: Setup virtual python environment
+    condition: ne(variables.SetupRestored, 'true')
+
+  - script: |
+      set PATH=$(Build.SourcesDirectory)\gvsbuild\env\Scripts;%PATH%
       pip install .
-      gvsbuild build $p x64 -c release --build-dir "$(Pipeline.Workspace)" --msys-dir "C:\msys64" --patches-root-dir "$(Pipeline.Workspace)" --vs-ver 17 gtk3
+    workingDirectory: "$(Build.SourcesDirectory)\\gvsbuild"
+    displayName: Install gvsbuild
+    condition: ne(variables.SetupRestored, 'true')
+    env:
+      PYTHON_HOME: ""
+      VIRTUAL_ENV: "$(Build.SourcesDirectory)\\gvsbuild\\env"
+
+  - task: Cache@2
+    inputs:
+      key: 'build | "$(Agent.OS)"'
+      restoreKeys: 'build | "$(Agent.OS)"'
+      path: "$(Pipeline.Workspace)"
+      cacheHitVar: BuildRestored
+    displayName: Cache build
+
+  - script: |
+      set PATH=$(Build.SourcesDirectory)\gvsbuild\env\Scripts;C:\msys64\usr\bin;%PATH%
+      mv "C:\program files\git" "C:\program files\_git"
+      gvsbuild build -p x64 -c release --build-dir "$(Pipeline.Workspace)" --msys-dir "C:\msys64" --patches-root-dir "$(Build.SourcesDirectory)\gvsbuild\patches" --same-python --vs-ver 17 gtk3
+      mv "C:\program files\_git" "C:\program files\git"
+    workingDirectory: "$(Build.SourcesDirectory)\\gvsbuild"
+    displayName: Build GTK
+    condition: ne(variables.BuildRestored, 'true')
+    env:
+      PYTHON_HOME: ""
+      VIRTUAL_ENV: "$(Build.SourcesDirectory)\\gvsbuild\\env"
+
+  - task: PublishPipelineArtifact@1
+    inputs:
+      artifactName: gtk-windows-latest
+      targetPath: "$(Pipeline.Workspace)\\gtk"
