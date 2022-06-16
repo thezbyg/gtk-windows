@@ -1,0 +1,14 @@
+trigger:
+- master
+
+jobs:
+- job: build_on_windows_latest
+  pool:
+    vmImage: windows-latest
+  steps:
+  - script: >
+      git clone --depth=1 https://github.com/wingtk/gvsbuild.git .
+      python -m venv env
+      .\env\Scripts\activate
+      pip install .
+      gvsbuild build $p x64 -c release --build-dir "$(Pipeline.Workspace)" --msys-dir "C:\msys64" --patches-root-dir "$(Pipeline.Workspace)" --vs-ver 17 gtk3
